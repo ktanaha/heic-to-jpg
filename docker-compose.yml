@@ -1,0 +1,33 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - VITE_VIBE_LOGGER_ENABLED=true
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile.dev
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend:/app/backend
+      - ./vibe-coding-logger:/app/vibe-coding-logger
+    working_dir: /app/backend
+    environment:
+      - GO_ENV=development
+      - PORT=8080
+      - VIBE_LOGGER_ENABLED=true
+      - VIBE_LOGGER_LEVEL=debug
+      - GOTOOLCHAIN=local
+    command: sh -c "go mod tidy && go run ./cmd/server"

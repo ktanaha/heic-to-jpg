@@ -1,0 +1,34 @@
+FROM golang:1.23-alpine
+
+# 開発に必要なツールとHEIC変換用のライブラリをインストール
+RUN apk add --no-cache \
+    git \
+    gcc \
+    g++ \
+    musl-dev \
+    libheif \
+    libheif-dev \
+    libde265 \
+    libde265-dev
+
+# CGOを有効化
+ENV CGO_ENABLED=1
+
+WORKDIR /app
+
+# vibe-coding-loggerをコピー
+COPY vibe-coding-logger/ ./vibe-coding-logger/
+
+# バックエンドの依存関係をコピーしてダウンロード
+COPY backend/go.mod backend/go.sum ./backend/
+WORKDIR /app/backend
+RUN go mod download
+
+# バックエンドのソースコードをコピー
+COPY backend/ ./
+
+# ポート8080を公開
+EXPOSE 8080
+
+# 開発サーバーを起動（ホットリロードなし）
+CMD ["go", "run", "./cmd/server"]
