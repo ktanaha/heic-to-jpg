@@ -1,0 +1,36 @@
+# Claude設定ファイル（個人設定のため除外）
+CLAUDE.md
+claude.md
+
+# 依存関係・環境
+node_modules/
+venv/
+__pycache__/
+*.pyc
+.env
+.env.local
+
+# OS生成ファイル
+.DS_Store
+Thumbs.db
+
+# IDEファイル
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ビルド成果物
+dist/
+build/
+*.log
+
+# テスト出力
+coverage/
+.pytest_cache/
+
+# 変換テスト用の一時ファイル
+test_output/
+*.jpg
+*.heic
+!sample.heic
