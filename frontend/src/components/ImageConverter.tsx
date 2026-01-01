@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import JSZip from 'jszip'
 import { FileItem, ConversionSettings } from '../types'
 import { convertSingleFile, downloadBlob } from '../services/api'
@@ -21,6 +21,7 @@ const ImageConverter: React.FC = () => {
       id: Math.random().toString(36).substring(7),
       file,
       status: 'pending' as const,
+      checked: true,
     }))
 
     setFiles((prev) => [...prev, ...newFiles])
@@ -58,10 +59,11 @@ const ImageConverter: React.FC = () => {
 
     try {
       const result = await convertSingleFile(fileItem.file, settings.quality)
+      const thumbnailUrl = URL.createObjectURL(result)
 
       setFiles((prev) =>
         prev.map((f) =>
-          f.id === fileItem.id ? { ...f, status: 'completed' as const, result } : f
+          f.id === fileItem.id ? { ...f, status: 'completed' as const, result, thumbnailUrl, rotation: 0 } : f
         )
       )
     } catch (error) {
@@ -79,14 +81,32 @@ const ImageConverter: React.FC = () => {
     }
   }
 
-  // すべてのファイルを変換
-  const handleConvertAll = async () => {
-    logger.logUserAction('すべて変換', { count: files.length })
+  // チェックボックスの変更
+  const handleCheckChange = (fileId: string, checked: boolean) => {
+    setFiles((prev) =>
+      prev.map((f) => (f.id === fileId ? { ...f, checked } : f))
+    )
+  }
 
-    for (const file of files) {
-      if (file.status === 'pending') {
-        await handleConvert(file)
-      }
+  // すべてをチェック
+  const handleCheckAll = () => {
+    logger.logUserAction('すべてチェック', { count: files.length })
+    setFiles((prev) => prev.map((f) => ({ ...f, checked: true })))
+  }
+
+  // すべてのチェックを外す
+  const handleUncheckAll = () => {
+    logger.logUserAction('すべてのチェックを外す', { count: files.length })
+    setFiles((prev) => prev.map((f) => ({ ...f, checked: false })))
+  }
+
+  // 選択したファイルを変換
+  const handleConvertAll = async () => {
+    const checkedFiles = files.filter((f) => f.checked && f.status === 'pending')
+    logger.logUserAction('選択したファイルを変換', { count: checkedFiles.length })
+
+    for (const file of checkedFiles) {
+      await handleConvert(file)
     }
   }
 
@@ -98,17 +118,109 @@ const ImageConverter: React.FC = () => {
     downloadBlob(fileItem.result, newFileName)
   }
 
+  // 画像を回転
+  const handleRotate = async (fileItem: FileItem) => {
+    if (!fileItem.result) return
+
+    logger.logUserAction('画像回転', { fileId: fileItem.id })
+
+    try {
+      // 現在の回転角度を取得（0, 90, 180, 270）
+      const currentRotation = fileItem.rotation || 0
+      const newRotation = (currentRotation + 90) % 360
+
+      // Blobを画像として読み込む
+      const img = new Image()
+      const originalUrl = URL.createObjectURL(fileItem.result)
+
+      await new Promise((resolve, reject) => {
+        img.onload = resolve
+        img.onerror = reject
+        img.src = originalUrl
+      })
+
+      // Canvasで画像を回転
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+
+      // 90度または270度の場合は幅と高さを入れ替える
+      if (newRotation === 90 || newRotation === 270) {
+        canvas.width = img.height
+        canvas.height = img.width
+      } else {
+        canvas.width = img.width
+        canvas.height = img.height
+      }
+
+      // 回転処理
+      ctx.translate(canvas.width / 2, canvas.height / 2)
+      ctx.rotate((newRotation * Math.PI) / 180)
+      ctx.drawImage(img, -img.width / 2, -img.height / 2)
+
+      // Blobに変換
+      const rotatedBlob = await new Promise<Blob>((resolve) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob)
+        }, 'image/jpeg', 0.85)
+      })
+
+      // 古いURLを解放
+      URL.revokeObjectURL(originalUrl)
+      if (fileItem.thumbnailUrl) {
+        URL.revokeObjectURL(fileItem.thumbnailUrl)
+      }
+
+      // 新しいサムネイルURLを生成
+      const newThumbnailUrl = URL.createObjectURL(rotatedBlob)
+
+      // 状態を更新
+      setFiles((prev) =>
+        prev.map((f) =>
+          f.id === fileItem.id
+            ? { ...f, result: rotatedBlob, thumbnailUrl: newThumbnailUrl, rotation: newRotation }
+            : f
+        )
+      )
+    } catch (error) {
+      logger.error('画像回転エラー', { error })
+      console.error('画像回転エラー:', error)
+    }
+  }
+
   // ファイル削除
   const handleRemove = (fileId: string) => {
     logger.logUserAction('ファイル削除', { fileId })
-    setFiles((prev) => prev.filter((f) => f.id !== fileId))
+    setFiles((prev) => {
+      const fileToRemove = prev.find((f) => f.id === fileId)
+      if (fileToRemove?.thumbnailUrl) {
+        URL.revokeObjectURL(fileToRemove.thumbnailUrl)
+      }
+      return prev.filter((f) => f.id !== fileId)
+    })
   }
 
   // すべてのファイルを削除
   const handleRemoveAll = () => {
     logger.logUserAction('すべてのファイルを削除', { count: files.length })
+    files.forEach((file) => {
+      if (file.thumbnailUrl) {
+        URL.revokeObjectURL(file.thumbnailUrl)
+      }
+    })
     setFiles([])
   }
+
+  // コンポーネントアンマウント時にすべてのObject URLを解放
+  useEffect(() => {
+    return () => {
+      files.forEach((file) => {
+        if (file.thumbnailUrl) {
+          URL.revokeObjectURL(file.thumbnailUrl)
+        }
+      })
+    }
+  }, [files])
 
   // 品質変更
   const handleQualityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,22 +229,22 @@ const ImageConverter: React.FC = () => {
     logger.logUserAction('品質変更', { quality })
   }
 
-  // 変換済みファイルをZIPでダウンロード
+  // 選択した変換済みファイルをZIPでダウンロード
   const handleDownloadAllAsZip = async () => {
-    const completedFiles = files.filter((f) => f.status === 'completed' && f.result)
+    const completedFiles = files.filter((f) => f.checked && f.status === 'completed' && f.result)
 
     if (completedFiles.length === 0) {
-      alert('変換済みのファイルがありません。先に「すべて変換」を実行してください。')
+      alert('選択された変換済みファイルがありません。ファイルをチェックして変換してください。')
       return
     }
 
-    logger.logUserAction('変換済みファイルZIPダウンロード', { count: completedFiles.length })
+    logger.logUserAction('選択した変換済みファイルZIPダウンロード', { count: completedFiles.length })
     setIsDownloadingZip(true)
 
     try {
       const zip = new JSZip()
 
-      // 変換済みファイルをZIPに追加
+      // 選択された変換済みファイルをZIPに追加
       for (const fileItem of completedFiles) {
         if (fileItem.result) {
           const newFileName = fileItem.file.name.replace(/\.heic$/i, '.jpg')
@@ -197,15 +309,24 @@ const ImageConverter: React.FC = () => {
       {files.length > 0 && (
         <>
           <div className="actions">
-            <button onClick={handleConvertAll} disabled={files.every((f) => f.status !== 'pending')}>
-              すべて変換
+            <button onClick={handleCheckAll}>
+              すべてチェック
+            </button>
+            <button onClick={handleUncheckAll}>
+              すべてのチェックを外す
+            </button>
+            <button
+              onClick={handleConvertAll}
+              disabled={!files.some((f) => f.checked && f.status === 'pending')}
+            >
+              選択したファイルを変換
             </button>
             <button
               onClick={handleDownloadAllAsZip}
-              disabled={isDownloadingZip || !files.some((f) => f.status === 'completed')}
+              disabled={isDownloadingZip || !files.some((f) => f.checked && f.status === 'completed')}
               className="download-zip-btn"
             >
-              {isDownloadingZip ? 'ZIP作成中...' : '変換済みファイルをZIPダウンロード'}
+              {isDownloadingZip ? 'ZIP作成中...' : '選択したファイルをZIPダウンロード'}
             </button>
             <button onClick={handleRemoveAll} className="remove-all-btn">
               すべて削除
@@ -215,6 +336,18 @@ const ImageConverter: React.FC = () => {
           <div className="file-list">
             {files.map((fileItem) => (
               <div key={fileItem.id} className={`file-item ${fileItem.status}`}>
+                <div className="file-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={fileItem.checked || false}
+                    onChange={(e) => handleCheckChange(fileItem.id, e.target.checked)}
+                  />
+                </div>
+                {fileItem.thumbnailUrl && (
+                  <div className="file-thumbnail">
+                    <img src={fileItem.thumbnailUrl} alt={fileItem.file.name} />
+                  </div>
+                )}
                 <div className="file-info">
                   <span className="file-name">{fileItem.file.name}</span>
                   <span className="file-size">
@@ -228,7 +361,12 @@ const ImageConverter: React.FC = () => {
                   )}
                   {fileItem.status === 'converting' && <span>変換中...</span>}
                   {fileItem.status === 'completed' && (
-                    <button onClick={() => handleDownload(fileItem)}>ダウンロード</button>
+                    <>
+                      <button onClick={() => handleRotate(fileItem)} className="rotate-btn">
+                        右回転
+                      </button>
+                      <button onClick={() => handleDownload(fileItem)}>ダウンロード</button>
+                    </>
                   )}
                   {fileItem.status === 'error' && (
                     <span className="error">{fileItem.error}</span>

@@ -3,7 +3,9 @@ package infrastructure
 import (
 	"bytes"
 	"fmt"
+	"image"
 	"image/jpeg"
+	"log"
 	"path/filepath"
 	"strings"
 
@@ -34,6 +36,19 @@ func (c *HeicConverter) Convert(req domain.ConversionRequest) (*domain.Conversio
 		return nil, fmt.Errorf("%w: %v", domain.ErrConversionFailed, err)
 	}
 
+	// デバッグ: デコード後の画像サイズをログ出力
+	bounds := img.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+	log.Printf("[DEBUG] %s - デコード後の画像サイズ: 幅=%d, 高さ=%d", req.FileName, width, height)
+
+	// 縦長の画像の場合、時計回りに90度回転
+	if height > width {
+		log.Printf("[DEBUG] %s - 縦長画像を検出、時計回りに90度回転します", req.FileName)
+		img = c.rotate90(img)
+		log.Printf("[DEBUG] %s - 回転後の画像サイズ: 幅=%d, 高さ=%d", req.FileName, img.Bounds().Dx(), img.Bounds().Dy())
+	}
+
 	// JPGエンコード
 	var buf bytes.Buffer
 	opts := &jpeg.Options{Quality: req.Quality}
@@ -57,4 +72,18 @@ func (c *HeicConverter) changeExtension(fileName, newExt string) string {
 	ext := filepath.Ext(fileName)
 	nameWithoutExt := strings.TrimSuffix(fileName, ext)
 	return nameWithoutExt + newExt
+}
+
+// rotate90 は画像を90度時計回りに回転
+func (c *HeicConverter) rotate90(img image.Image) image.Image {
+	bounds := img.Bounds()
+	w, h := bounds.Dx(), bounds.Dy()
+	rotated := image.NewRGBA(image.Rect(0, 0, h, w))
+
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			rotated.Set(h-1-y, x, img.At(x, y))
+		}
+	}
+	return rotated
 }
