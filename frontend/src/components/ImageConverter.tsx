@@ -188,6 +188,16 @@ const ImageConverter: React.FC = () => {
     }
   }
 
+  // 選択した変換済みファイルを一括右回転
+  const handleRotateAll = async () => {
+    const checkedCompletedFiles = files.filter((f) => f.checked && f.status === 'completed' && f.result)
+    logger.logUserAction('選択したファイルを一括右回転', { count: checkedCompletedFiles.length })
+
+    for (const fileItem of checkedCompletedFiles) {
+      await handleRotate(fileItem)
+    }
+  }
+
   // ファイル削除
   const handleRemove = (fileId: string) => {
     logger.logUserAction('ファイル削除', { fileId })
@@ -320,6 +330,13 @@ const ImageConverter: React.FC = () => {
               disabled={!files.some((f) => f.checked && f.status === 'pending')}
             >
               選択したファイルを変換
+            </button>
+            <button
+              onClick={handleRotateAll}
+              disabled={!files.some((f) => f.checked && f.status === 'completed')}
+              className="rotate-all-btn"
+            >
+              選択したファイルを右回転
             </button>
             <button
               onClick={handleDownloadAllAsZip}

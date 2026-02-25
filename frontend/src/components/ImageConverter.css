@@ -91,6 +91,14 @@
   cursor: not-allowed;
 }
 
+.actions .rotate-all-btn {
+  background-color: #FF9800;
+}
+
+.actions .rotate-all-btn:hover:not(:disabled) {
+  background-color: #F57C00;
+}
+
 .actions .download-zip-btn {
   background-color: #FF9800;
 }

@@ -48,15 +48,36 @@ cd heic-to-jpg
 
 ### 2. 開発環境の起動
 
+**簡単な方法（推奨）:**
 ```bash
-docker-compose up
+./start.sh
+```
+
+**または直接Docker Composeを使用:**
+```bash
+docker-compose up -d
 ```
 
 初回起動時は、依存関係のインストールとビルドが行われます。起動完了後、以下のURLでアクセスできます：
 
-- **フロントエンド**: http://localhost:3000
-- **バックエンドAPI**: http://localhost:8080
-- **ヘルスチェック**: http://localhost:8080/health
+- **フロントエンド**: http://localhost:3001
+- **バックエンドAPI**: http://localhost:8081
+- **ヘルスチェック**: http://localhost:8081/health
+
+### 3. 起動スクリプトの使い方
+
+`start.sh` スクリプトで簡単に操作できます：
+
+```bash
+./start.sh            # 起動
+./start.sh stop       # 停止
+./start.sh restart    # 再起動
+./start.sh logs       # ログ表示
+./start.sh status     # ステータス確認
+./start.sh clean      # クリーンビルド
+./start.sh test       # テスト実行
+./start.sh help       # ヘルプ表示
+```
 
 ## 使い方
 
