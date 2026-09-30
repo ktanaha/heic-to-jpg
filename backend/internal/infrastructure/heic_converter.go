@@ -28,10 +28,7 @@ func (c *HeicConverter) Convert(req domain.ConversionRequest) (*domain.Conversio
 		return nil, err
 	}
 
-	// HEICファイルのデコード
-	// goheif.Decode() は既にEXIF Orientationを適用済みの画像を返すため、
-	// 追加の回転処理は不要
-	img, err := goheif.Decode(bytes.NewReader(req.Data))
+	img, err := c.decode(req.Data)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", domain.ErrConversionFailed, err)
 	}
@@ -65,6 +62,21 @@ func (c *HeicConverter) Convert(req domain.ConversionRequest) (*domain.Conversio
 		OriginalSize:  int64(len(req.Data)),
 		ConvertedSize: int64(buf.Len()),
 	}, nil
+}
+
+// jpegMagic はJPEGファイル先頭のマジックバイト
+var jpegMagic = []byte{0xFF, 0xD8, 0xFF}
+
+// decode は先頭バイトで形式を判定して画像をデコードする。
+// iPhoneからの転送時に拡張子が.HEICのまま中身がJPEGになっている場合があるため、
+// JPEGはimage/jpegでデコードし、それ以外はHEICとして扱う
+func (c *HeicConverter) decode(data []byte) (image.Image, error) {
+	if bytes.HasPrefix(data, jpegMagic) {
+		return jpeg.Decode(bytes.NewReader(data))
+	}
+	// goheif.Decode() は既にEXIF Orientationを適用済みの画像を返すため、
+	// 追加の回転処理は不要
+	return goheif.Decode(bytes.NewReader(data))
 }
 
 // changeExtension はファイル名の拡張子を変更する
